@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>我的工资条</title>
+<link rel="stylesheet" href="/assets/app.css?v=20261015d">
+</head>
+<body class="page-employee">
+<div id="boot" class="boot">
+  <div class="boot-spinner"></div>
+  <div class="boot-text">正在登录…</div>
+</div>
+
+<div id="app" class="app hidden">
+  <header class="hero">
+    <div class="hero-top">
+      <div class="hero-month" id="heroMonth">—</div>
+      <div class="hero-name" id="heroName"></div>
+    </div>
+    <div class="hero-amount">
+      <span class="hero-num" id="heroNet">0.00</span>
+      <span class="hero-cap">实发合计（元）</span>
+    </div>
+    <div class="hero-badge" id="heroBadge"></div>
+    <select class="month-switch hidden" id="monthSwitch" aria-label="选择月份"></select>
+  </header>
+
+  <section class="notice" id="notice">
+    <span class="notice-icon">i</span>
+    <span>工资条属于敏感信息，请注意保密。如有疑问请联系人事。</span>
+    <button class="notice-close" id="noticeClose" aria-label="关闭">×</button>
+  </section>
+
+  <main id="detail"></main>
+
+  <div class="summary" id="summary"></div>
+
+  <footer class="dock" id="dock">
+    <button class="btn-primary" id="btnConfirm">确认收到</button>
+    <div class="confirmed-tip hidden" id="confirmedTip"></div>
+  </footer>
+</div>
+
+<div id="fallback" class="fallback hidden">
+  <div class="fallback-card">
+    <h2>请在钉钉中打开</h2>
+    <p>本页面需要通过钉钉免登识别您的身份。请在钉钉工作通知里点击「查看我的工资条」。</p>
+    <div class="fallback-alt">
+      <input type="text" id="devUserId" placeholder="调试用 userId（DEV_MODE=1 时可用）">
+      <button id="devLogin">调试登录</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/login.js?v=20261015d"></script>
+<script src="/assets/employee.js?v=20261015d"></script>
+</body>
+</html>

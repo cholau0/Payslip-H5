@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工资条管理台</title>
+<link rel="stylesheet" href="/assets/app.css?v=20261015d">
+</head>
+<body class="page-admin">
+<div id="boot" class="boot"><div class="boot-spinner"></div><div class="boot-text">正在校验管理员身份…</div></div>
+
+<div id="gate" class="fallback hidden">
+  <div class="fallback-card">
+    <h2>管理员登录</h2>
+    <p>请在钉钉里打开本页面（白名单成员自动通过），或在电脑上用工号/姓名 + 口令登录。</p>
+    <div class="fallback-alt">
+      <input type="text" id="acct" placeholder="工号或姓名" autocomplete="username">
+      <input type="password" id="pw" placeholder="管理员口令" autocomplete="current-password">
+      <button id="pwLogin">登录</button>
+    </div>
+    <p class="hint" id="gateMsg"></p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header class="admin-top">
+    <h1>电子工资条 · 管理台</h1>
+    <div class="who"><span id="whoami"></span><a href="/admin.html?logout=1">退出</a></div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="overview">概览与发送</button>
+    <button class="tab" data-tab="import">导入工资表</button>
+    <button class="tab" data-tab="list">签收明细</button>
+    <button class="tab" data-tab="roster">花名册</button>
+    <button class="tab" data-tab="logs">操作日志</button>
+  </nav>
+
+  <div class="wrap">
+    <!-- 概览 -->
+    <section id="tab-overview">
+      <div class="card">
+        <h2>月度工资条 <span class="sub">导入后需点「发送」才会推送到员工钉钉</span></h2>
+        <div id="monthCards"></div>
+      </div>
+
+      <div class="card">
+        <h2>按人勾选发送 <span class="sub">先勾几个人试跑，确认没问题再回上面全员发</span></h2>
+        <div class="form-row">
+          <label>月份</label>
+          <input type="month" id="sMonth">
+          <select id="sStatus">
+            <option value="">全部状态</option>
+            <option value="pending">未发送</option>
+            <option value="sent">已发送未签收</option>
+            <option value="confirmed">已签收</option>
+          </select>
+          <select id="sDept"><option value="">全部部门</option></select>
+          <input type="text" id="sKw" placeholder="姓名">
+          <button class="btn primary" id="btnSQuery">查询</button>
+        </div>
+        <div class="form-row selbar">
+          <span class="hint">勾选要发送的人：</span>
+          <button class="btn" id="selAll">全选</button>
+          <button class="btn" id="selNone">全不选</button>
+          <button class="btn" id="selPending">只选未发送</button>
+          <button class="btn" id="selInvert">反选</button>
+          <span class="selcount">已选 <b id="selCount">0</b> 人</span>
+          <button class="btn primary" id="btnSendSel">发送选中</button>
+          <button class="btn" id="btnRemindSel">催办选中</button>
+          <button class="btn danger" id="btnResetSel">重置为未发送</button>
+        </div>
+        <div class="table-scroll"><table class="grid" id="listTable"></table></div>
+      </div>
+    </section>
+
+    <!-- 导入 -->
+    <section id="tab-import" class="hidden">
+      <div class="card">
+        <h2>导入 Excel 工资表</h2>
+        <div class="form-row">
+          <label>工资月份</label>
+          <input type="month" id="impMonth">
+          <button class="btn" id="btnTemplate">下载导入模板</button>
+        </div>
+        <div class="file-drop" id="drop">
+          <div>把工资表拖到这里，或 <b>点击选择文件</b></div>
+          <div class="hint" id="fileName">支持 .xlsx / .xls / .csv，第一行需含「姓名」列</div>
+          <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+        </div>
+        <div class="form-row" style="margin-top:12px">
+          <button class="btn primary" id="btnPreview" disabled>预检</button>
+          <label><input type="radio" name="mode" value="overwrite" checked> 覆盖同月已有数据</label>
+          <label><input type="radio" name="mode" value="skip"> 跳过已存在的人</label>
+          <button class="btn" id="btnCommit" disabled>确认导入</button>
+        </div>
+        <div id="previewOut"></div>
+      </div>
+      <div class="card">
+        <h2>字段口径说明</h2>
+        <div class="hint" id="fieldDoc"></div>
+      </div>
+    </section>
+
+    <!-- 明细 -->
+    <section id="tab-list" class="hidden">
+      <div class="card">
+        <h2>签收明细 <span class="sub">只读查询与导出台账；要挑人发送请去「概览与发送」</span></h2>
+        <div class="form-row">
+          <input type="month" id="qMonth">
+          <select id="qStatus">
+            <option value="">全部状态</option>
+            <option value="pending">未发送</option>
+            <option value="sent">已发送未签收</option>
+            <option value="confirmed">已签收</option>
+          </select>
+          <select id="qDept"><option value="">全部部门</option></select>
+          <input type="text" id="qKw" placeholder="姓名">
+          <button class="btn primary" id="btnQuery">查询</button>
+          <button class="btn" id="btnCsv">导出 CSV</button>
+        </div>
+        <div class="table-scroll"><table class="grid" id="auditTable"></table></div>
+      </div>
+    </section>
+
+    <!-- 花名册 -->
+    <section id="tab-roster" class="hidden">
+      <div class="card">
+        <h2>花名册 <span class="sub">当前以「姓名」唯一定位为主，重名才需要工号；钉钉工号字段整理好前不要依赖它</span></h2>
+        <div class="form-row">
+          <button class="btn primary" id="btnSync">从钉钉同步通讯录</button>
+          <input type="text" id="rKw" placeholder="搜索姓名/工号">
+          <button class="btn" id="btnRSearch">搜索</button>
+        </div>
+        <div class="table-scroll"><table class="grid" id="rosterTable"></table></div>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section id="tab-logs" class="hidden">
+      <div class="card">
+        <h2>发送记录</h2>
+        <div class="table-scroll"><table class="grid" id="sendLogTable"></table></div>
+      </div>
+      <div class="card">
+        <h2>操作日志</h2>
+        <div class="table-scroll"><table class="grid" id="logTable"></table></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="/assets/login.js?v=20261015d"></script>
+<script src="/assets/admin.js?v=20261015d"></script>
+</body>
+</html>

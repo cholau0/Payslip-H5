@@ -1,0 +1,14 @@
+# 统一换行符，避免 Windows 上开发导致全文件 diff
+* text=auto eol=lf
+
+# 语言统计修正
+*.js      linguist-language=JavaScript
+*.css     linguist-language=CSS
+*.html    linguist-language=HTML
+*.sql     linguist-language=SQL
+*.md      linguist-documentation
+
+# 发布归档时排除开发辅助文件
+/.github        export-ignore
+/.gitattributes export-ignore
+/SECURITY.md    export-ignore

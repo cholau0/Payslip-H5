@@ -1,0 +1,19 @@
+[Unit]
+Description=Payslip H5 (电子工资条)
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=payslip
+WorkingDirectory=/opt/payslip-h5
+EnvironmentFile=/opt/payslip-h5/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+# 工资数据目录权限收紧
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
