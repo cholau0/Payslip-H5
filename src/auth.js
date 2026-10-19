@@ -1,8 +1,20 @@
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const config = require('./config');
 const dd = require('./dingtalk');
 const { one, run, q } = require('./db');
+
+/** 常数时间比较，避免口令逐字节比较带来的时序侧信道 */
+function constantTimeEquals(a, b) {
+  const ba = Buffer.from(String(a), 'utf8');
+  const bb = Buffer.from(String(b), 'utf8');
+  if (ba.length !== bb.length) {
+    // 仍做一次比较，让耗时不随"前缀匹配长度"变化
+    crypto.timingSafeEqual(Buffer.alloc(32), Buffer.alloc(32));
+    return false;
+  }
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 function signToken(payload) {
   return jwt.sign(payload, config.auth.sessionKey, { expiresIn: `${config.auth.ttlHours}h` });
@@ -35,6 +47,24 @@ function isAdminUserId(userId) {
 
 function isAdminIdentity({ userId, jobNumber }) {
   return isAdminUserId(userId) || isAdminJobNumber(jobNumber);
+}
+
+/**
+ * 是否可查看审计日志。白名单为空时回退为所有管理员可见。
+ * 判定只信会话里的 userId，不接受前端传参。
+ */
+function canViewLogs(user) {
+  if (!user || user.role !== 'admin') return false;
+  if (!config.auth.logViewerUserIds.length) return true;
+  return config.auth.logViewerUserIds.includes(String(user.userId));
+}
+
+/** 日志接口闸门：不在白名单直接 403，避免只靠前端隐藏标签页 */
+function requireLogViewer(req, res, next) {
+  if (!canViewLogs(req.user)) {
+    return res.status(403).json({ error: '仅授权管理员可查看操作日志' });
+  }
+  next();
 }
 
 /**
@@ -73,10 +103,7 @@ async function loginByCode(code) {
  */
 async function loginByPassword(account, password) {
   if (!config.auth.adminPassword) return { error: '未启用口令登录，请在钉钉里使用' };
-  // 常数时间比较，避免口令逐字符比对的时序侧信道
-  const a = Buffer.from(String(password || ''));
-  const b = Buffer.from(config.auth.adminPassword);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return { error: '口令不正确' };
+  if (!constantTimeEquals(String(password || ''), config.auth.adminPassword)) return { error: '口令不正确' };
   const acc = String(account || '').trim();
   if (!acc) return { error: '请输入工号或姓名' };
 
@@ -140,11 +167,15 @@ async function logAction(req, action, detail) {
   }
 }
 
-/** 取真实来访 IP（Nginx 反代场景，trust proxy=1 时 req.ip 已是可信的客户端 IP） */
+/**
+ * 取来访 IP。
+ * 用 Express 的 req.ip（配合 server.js 的 trust proxy=1，即反向代理解析出的地址），
+ * 不要手读 x-forwarded-for——那会让客户端自塞的头被采信。
+ * 注意：若反向代理侧配置了"信任任意来源的真实IP头"，此值仍可被伪造，
+ * 因此它只宜作为辅助线索，不构成法律级证据（须在 Nginx 层收紧信任范围）。
+ */
 function clientIp(req) {
-  // 优先用 Express 解析过的 req.ip；直连且未启用 trust proxy 时回退 socket 地址
-  if (req.ip) return String(req.ip).replace('::ffff:', '');
-  return (req.socket.remoteAddress || '').replace('::ffff:', '');
+  return (req.ip || req.socket.remoteAddress || '').replace('::ffff:', '');
 }
 
 module.exports = {
@@ -160,5 +191,7 @@ module.exports = {
   clientIp,
   isAdminJobNumber,
   isAdminUserId,
-  isAdminIdentity
+  isAdminIdentity,
+  canViewLogs,
+  requireLogViewer
 };

@@ -25,16 +25,27 @@ function bad(res, message, status = 400) {
   return res.status(status).json({ error: message });
 }
 
+/**
+ * 区分「可展示的业务提示」与「内部系统细节」。
+ * SQL 报错、驱动错误码、堆栈片段一律屏蔽，只留通用文案，细节进服务端日志。
+ * 钉钉接口返回的提示带「钉钉」字样，属 HR 排障需要的信息，予以保留。
+ */
+function clientMessage(err) {
+  const m = err && err.message ? String(err.message) : '';
+  if (!m) return '请求失败';
+  if (/钉钉/.test(m)) return m;
+  if (/SQL|syntax|ER_[A-Z_]|mysql|maria|sequelize|knex|at\s+\S+\s+\(|errno|EACCES|ENOENT|read ECONNRESET/i.test(m)) {
+    return '服务处理失败，请稍后重试；若持续失败请联系管理员';
+  }
+  return m.slice(0, 200);
+}
+
 function guard(fn) {
   return (req, res) => {
     Promise.resolve(fn(req, res)).catch((err) => {
       console.error('[api]', req.method, req.path, err);
-      const status = err && err.name === 'DingError' ? 502 : 500;
-      // 生产环境不回显内部错误细节（堆栈/SQL 等），只返回通用文案
-      const msg = config.env === 'production'
-        ? (err && err.name === 'DingError' ? err.message : '服务器内部错误')
-        : (err && err.message ? err.message : '服务器内部错误');
-      bad(res, msg, status);
+      const msg = clientMessage(err);
+      bad(res, msg, err && err.name === 'DingError' ? 502 : 400);
     });
   };
 }
@@ -58,12 +69,20 @@ router.get('/meta', (req, res) => {
 
 /** H5 免登鉴权签名：前端传当前页面完整 URL */
 router.post('/js-sign', guard(async (req, res) => {
-  const url = String(req.body && req.body.url || '');
-  // 只为本应用域名签名，防止被拿去给钓鱼页做 dd.config 鉴权
-  if (config.publicBaseUrl && !url.startsWith(config.publicBaseUrl + '/') && url !== config.publicBaseUrl) {
+  const url = String((req.body && req.body.url) || '');
+  /**
+   * 只给本站域名下的页面签名。否则这个接口等于一个"签名 oracle"——
+   * 任何人可拿它为本企业任意钓鱼页面签发合法的 dd.config 鉴权参数。
+   */
+  let target;
+  let base;
+  try {
+    target = new URL(url);
+    base = new URL(config.publicBaseUrl);
+  } catch {
     return bad(res, 'url 参数不合法');
   }
-  if (!/^https?:\/\//.test(url)) return bad(res, 'url 参数不合法');
+  if (target.origin !== base.origin) return bad(res, 'url 与本站域名不一致，拒绝签名');
   res.json(await dd.signJsapi(url));
 }));
 
@@ -76,7 +95,9 @@ router.post('/auth/login', guard(async (req, res) => {
 router.post('/auth/password', guard(async (req, res) => {
   const result = await auth.loginByPassword(String(req.body.account || ''), String(req.body.password || ''));
   if (result.error) return bad(res, result.error, 401);
-  auth.logAction({ user: result.user, headers: req.headers, socket: req.socket }, 'login_password', '口令登录成功');
+  // 必须用真实 req 记日志：伪造的 req 对象没有 req.ip，会把来访 IP 错记成 127.0.0.1
+  req.user = result.user;
+  auth.logAction(req, 'login_password', '口令登录成功');
   res.json(result);
 }));
 
@@ -87,6 +108,11 @@ router.post('/auth/dev', guard(async (req, res) => {
 }));
 
 /* ---------------------------------------------------------------- 员工端 */
+
+/** 当前会话身份（管理台水印与权限显隐用） */
+router.get('/me/whoami', auth.requireLogin, (req, res) => {
+  res.json({ user: req.user, canViewLogs: auth.canViewLogs(req.user) });
+});
 
 /** 我的月份列表（只返回自己的，userId 取自会话，不接受前端传入） */
 router.get('/me/months', auth.requireLogin, guard(async (req, res) => {
@@ -269,7 +295,7 @@ router.post('/admin/send', auth.requireLogin, auth.requireAdmin, guard(async (re
     const workers = Array.from({ length: 5 }, async () => {
       while (queue.length) {
         const r = queue.shift();
-        const md = card.payslipCard({ month, name: r.name, net: r.net_amount, remark: r.remark });
+        const md = card.payslipCard({ month, name: r.name, remark: r.remark });
         try {
           const one = await dd.sendWorkNotice({
             userIds: [r.user_id],
@@ -394,12 +420,28 @@ router.post('/admin/reset-pending', auth.requireLogin, auth.requireAdmin, guard(
   if (req.body.confirm !== true) return bad(res, '需要明确确认后才执行重置');
 
   const marks = ids.map(() => '?').join(',');
-  const affected = await db.run(
-    `UPDATE payslips SET status='pending', sent_at=NULL, confirmed_at=NULL, confirm_ip=NULL, confirm_ua=?
-       WHERE pay_month=? AND user_id IN (${marks}) AND status<>'pending'`,
-    [null, month, ...ids]
+  // 先把被清除的签收凭证落到审计日志，避免"重置即销毁证据"
+  const before = await db.q(
+    `SELECT name, status, sent_at, confirmed_at, confirm_ip FROM payslips
+      WHERE pay_month=? AND user_id IN (${marks}) AND status<>'pending'`,
+    [month, ...ids]
   );
-  auth.logAction(req, 'reset_pending', `${month} 重置 ${affected.affectedRows} 人为未发送（选中 ${ids.length} 人）`);
+  const affected = await db.run(
+    `UPDATE payslips SET status='pending', sent_at=NULL, confirmed_at=NULL, confirm_ip=NULL, confirm_ua=NULL
+       WHERE pay_month=? AND user_id IN (${marks}) AND status<>'pending'`,
+    [month, ...ids]
+  );
+  const evidence = before
+    .filter((r) => r.status === 'confirmed')
+    .map((r) => `${r.name}:${r.confirmed_at}@${r.confirm_ip || '-'}`)
+    .join('; ')
+    .slice(0, 400);
+  auth.logAction(
+    req,
+    'reset_pending',
+    `${month} 重置 ${affected.affectedRows} 人为未发送（选中 ${ids.length} 人）` +
+      (evidence ? `；被清除的原签收凭证 -> ${evidence}` : '')
+  );
   res.json({ reset: affected.affectedRows, note: '这些人的发送时间与签收记录已清空，可重新发送' });
 }));
 
@@ -499,13 +541,22 @@ router.get('/admin/template.xlsx', auth.requireLogin, auth.requireAdmin, guard(a
   res.send(buf);
 }));
 
-router.get('/admin/logs', auth.requireLogin, auth.requireAdmin, guard(async (req, res) => {
-  const rows = await db.q('SELECT actor, action, detail, ip, created_at FROM admin_logs ORDER BY id DESC LIMIT 200');
+router.get('/admin/logs', auth.requireLogin, auth.requireAdmin, auth.requireLogViewer, guard(async (req, res) => {
+  // 左连花名册把 userId 翻成姓名；离职或同步前的记录回退显示 userId
+  const rows = await db.q(
+    `SELECT l.actor, e.name, e.job_number, e.dept_name, l.action, l.detail, l.ip, l.created_at
+       FROM admin_logs l LEFT JOIN employees e ON e.user_id = l.actor
+      ORDER BY l.id DESC LIMIT 200`
+  );
   res.json({ rows });
 }));
 
-router.get('/admin/send-logs', auth.requireLogin, auth.requireAdmin, guard(async (req, res) => {
-  const rows = await db.q('SELECT pay_month, action, target_count, failed, operator, created_at FROM send_logs ORDER BY id DESC LIMIT 100');
+router.get('/admin/send-logs', auth.requireLogin, auth.requireAdmin, auth.requireLogViewer, guard(async (req, res) => {
+  const rows = await db.q(
+    `SELECT s.pay_month, s.action, s.target_count, s.failed, s.operator, e.name, s.created_at
+       FROM send_logs s LEFT JOIN employees e ON e.user_id = s.operator
+      ORDER BY s.id DESC LIMIT 100`
+  );
   res.json({ rows });
 }));
 

@@ -5,6 +5,26 @@
   const esc = PAuth.esc;
   const state = { file: null, month: '', fields: [], preview: null, listRows: [], selected: new Set() };
 
+  /** 管理台水印：以当前操作人姓名平铺（管理台可见全员薪酬，泄露可溯源） */
+  function applyWatermark(text) {
+    const t = String(text || '').trim();
+    const old = document.getElementById('wm');
+    if (old) old.remove();
+    if (!t) return;
+    const safe = t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="280" height="170">' +
+      '<text x="140" y="85" text-anchor="middle" transform="rotate(-22 140 85)" ' +
+      'font-size="18" font-family="sans-serif" fill="#4b5563" fill-opacity="0.08">' + safe + '</text></svg>';
+    const el = document.createElement('div');
+    el.id = 'wm';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:60;' +
+      'background-image:url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '");';
+    document.body.appendChild(el);
+  }
+
   function fmtMonth(m) {
     if (!m) return '';
     const [y, mo] = m.split('-');
@@ -50,7 +70,14 @@
     }
     const me = await PAuth.api('/api/meta');
     state.fields = me.fields || [];
-    $('whoami').textContent = '管理员工作台';
+    const ident = await PAuth.api('/api/me/whoami');
+    applyWatermark([ident.user.name, ident.user.jobNumber].filter(Boolean).join(' · '));
+    $('whoami').textContent = '操作人：' + (ident.user.name || ident.user.userId);
+    // 日志标签页只对授权管理员显示；真正的拦截在服务端，这里只是不给出入口
+    if (!ident.canViewLogs) {
+      const logTab = document.querySelector('.tab[data-tab="logs"]');
+      if (logTab) logTab.remove();
+    }
     show('app');
     renderOverview(data);
     renderFieldDoc(me.fields);
@@ -538,12 +565,35 @@
   }
 
   /* ---------------- 日志 ---------------- */
+  const ACTION_TEXT = {
+    import: '导入工资表',
+    send: '发送工资条',
+    remind: '催办未签收',
+    confirm: '员工确认签收',
+    export: '导出台账',
+    reset_pending: '重置为未发送',
+    drop_pending: '删除未发送数据',
+    sync_contacts: '同步通讯录',
+    bind_job_number: '补录工号',
+    login_password: '口令登录'
+  };
+
+  /** 操作人：优先显示姓名（附 userId 小字），花名册里没有则退回 userId */
+  function actorText(r) {
+    if (r.name) return `${esc(r.name)}<div class="hint">${esc(r.actor)}</div>`;
+    return esc(r.actor || '');
+  }
+
   async function loadLogs() {
     const [a, b] = await Promise.all([PAuth.api('/api/admin/logs'), PAuth.api('/api/admin/send-logs')]);
     $('logTable').innerHTML =
       '<tr><th>时间</th><th>操作人</th><th>动作</th><th>详情</th><th>IP</th></tr>' +
       (a.rows.length
-        ? a.rows.map((r) => `<tr><td>${esc(r.created_at)}</td><td>${esc(r.actor)}</td><td>${esc(r.action)}</td><td>${esc(r.detail || '')}</td><td>${esc(r.ip || '')}</td></tr>`).join('')
+        ? a.rows
+            .map(
+              (r) => `<tr><td>${esc(r.created_at)}</td><td>${actorText(r)}</td><td>${esc(ACTION_TEXT[r.action] || r.action)}</td><td>${esc(r.detail || '')}</td><td>${esc(r.ip || '')}</td></tr>`
+            )
+            .join('')
         : '<tr><td colspan="5" class="hint">暂无记录</td></tr>');
     const fl = (s) => {
       try {
@@ -561,7 +611,7 @@
         ? b.rows
             .map(
               (r) => `<tr><td>${esc(r.created_at)}</td><td>${r.pay_month}</td><td>${r.action === 'send' ? '发送' : '催办'}</td>
-              <td class="r">${r.target_count}</td><td>${esc(r.operator || '')}</td><td class="hint">${esc(fl(r.failed))}</td></tr>`
+              <td class="r">${r.target_count}</td><td>${actorText({ name: r.name, actor: r.operator })}</td><td class="hint">${esc(fl(r.failed))}</td></tr>`
             )
             .join('')
         : '<tr><td colspan="6" class="hint">暂无发送记录</td></tr>');

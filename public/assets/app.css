@@ -45,7 +45,8 @@ body {
 .hero .hero-badge { position: relative; }
 .hero-badge { margin-left: 0; }
 .month-switch {
-  position: absolute; right: 16px; top: 16px; max-width: 46%;
+  position: absolute; right: 16px; bottom: 14px;
+  max-width: 46%;
   background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.4);
   border-radius: 8px; padding: 5px 8px; font-size: 13px; appearance: none; -webkit-appearance: none;
 }

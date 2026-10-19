@@ -9,6 +9,29 @@
     return /^\d{4}-\d{2}$/.test(m || '') ? m : '';
   }
 
+  /**
+   * 页面斜向水印：以签收人姓名平铺，截图外传可溯源。
+   * 纯前端水印可被开发者工具移除，属于常规威慑手段（与钉钉/飞书同类实现）。
+   */
+  function applyWatermark(text) {
+    const t = String(text || '').trim();
+    const old = document.getElementById('wm');
+    if (old) old.remove();
+    if (!t) return;
+    const safe = t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="280" height="170">' +
+      '<text x="140" y="85" text-anchor="middle" transform="rotate(-22 140 85)" ' +
+      'font-size="20" font-family="sans-serif" fill="#4b5563" fill-opacity="0.07">' + safe + '</text></svg>';
+    const el = document.createElement('div');
+    el.id = 'wm';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:60;' +
+      'background-image:url("data:image/svg+xml;utf8,' + encodeURIComponent(svg) + '");';
+    document.body.appendChild(el);
+  }
+
   function showApp() {
     $('boot').classList.add('hidden');
     $('app').classList.remove('hidden');
@@ -56,6 +79,7 @@
     $('heroMonth').textContent = fmtMonthLabel(s.payMonth) + ' 工资条';
     $('heroName').textContent = s.name + (s.deptName ? ' · ' + s.deptName : '');
     $('heroNet').textContent = PAuth.money(s.net);
+    applyWatermark(s.name);
 
     const badge = $('heroBadge');
     if (s.status === 'confirmed') {
@@ -131,6 +155,7 @@
     if (!state.months.length) {
       $('boot').classList.add('hidden');
       showApp();
+      applyWatermark('');
       $('detail').innerHTML = '<div class="empty"><h3>还没有发放给你的工资条</h3><p>发放后会通过钉钉工作通知提醒你</p></div>';
       $('dock').classList.add('hidden');
       return;

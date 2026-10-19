@@ -35,8 +35,8 @@ const config = {
     charset: 'utf8mb4',
     waitForConnections: true,
     connectionLimit: 8,
-    // 注意：不开启 multipleStatements，缩小堆叠注入的潜在破坏面；
-    // 建表脚本（scripts/init-db.js）用独立连接单独开启
+    // 连接池不开启多语句执行：一旦将来出现拼接 SQL，堆叠注入的破坏面会成倍放大。
+    // 建库建表需要多语句，由 scripts/init-db.js 用独立连接显式开启。
     dateStrings: true
   },
 
@@ -52,6 +52,15 @@ const config = {
      * （实测有人把入职日期填进了工号字段），而 userId 稳定唯一。
      */
     adminUserIds: str('ADMIN_USER_IDS')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /**
+     * 允许查看操作日志/发送记录的人（userId）。
+     * 日志含全员签收时间与 IP，属敏感审计信息，默认只给主管理员；
+     * 留空则回退为「所有管理员可见」。
+     */
+    logViewerUserIds: str('LOG_VIEWER_USER_IDS')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
