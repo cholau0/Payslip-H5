@@ -16,6 +16,12 @@ HR 上传工资表 Excel，系统自动解析、校验、匹配员工，通过�
 
 ---
 
+**员工端 · 钉钉工作通知推送 → 打开查看明细 → 一键确认签收**
+
+<img src="pic/7.jpg" alt="钉钉工作通知卡片" width="300"> <img src="pic/demo-shot.png" alt="员工端工资条明细" width="300">
+
+<br>
+
 **概览与发送 · 签收率一目了然**
 
 <img src="pic/01.png" alt="管理台概览与发送" width="820">
