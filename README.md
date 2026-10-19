@@ -18,25 +18,33 @@ HR 上传工资表 Excel，系统自动解析、校验、匹配员工，通过�
 
 **员工端 · 钉钉工作通知推送 → 打开查看明细 → 一键确认签收**
 
-<img src="pic/7.jpg" alt="钉钉工作通知卡片" width="300"> <img src="pic/demo-shot.png" alt="员工端工资条明细" width="300">
+<p><img src="pic/7.jpg" alt="钉钉工作通知卡片" width="300"></p>
+
+<p><img src="pic/demo-shot.png" alt="员工端工资条明细" width="300"></p>
 
 <br>
 
 **概览与发送 · 签收率一目了然**
 
-<img src="pic/01.png" alt="管理台概览与发送" width="820">
+<p><img src="pic/01.png" alt="管理台概览与发送" width="820"></p>
 
 <br>
 
 **导入工资表 · 表头自动识别，导入前逐行对账**
 
-<img src="pic/02.png" alt="导入工资表" width="49%"> <img src="pic/03.png" alt="字段口径说明" width="49%">
+<p><img src="pic/02.png" alt="导入工资表" width="820"></p>
+
+<p><img src="pic/03.png" alt="字段口径说明" width="820"></p>
 
 <br>
 
 **签收台账 · 花名册 · 全量操作审计**
 
-<img src="pic/04.png" alt="签收明细" width="32%"> <img src="pic/05.png" alt="花名册" width="32%"> <img src="pic/06.png" alt="操作日志" width="32%">
+<p><img src="pic/04.png" alt="签收明细" width="820"></p>
+
+<p><img src="pic/05.png" alt="花名册" width="820"></p>
+
+<p><img src="pic/06.png" alt="操作日志" width="820"></p>
 
 ---
 
